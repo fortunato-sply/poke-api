@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const crypto = require('crypto-js');
-const jwt = require('jwt-decode');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 class userController {
@@ -33,7 +33,7 @@ class userController {
     const { dataEncrypted } = req.body;
 
     if(!dataEncrypted) 
-      return res.status(400).send({ message: 'invalid data.' })
+      return res.status(500).send({ message: 'invalid data.' })
 
     const dataDecrypted = crypto.AES.decrypt(dataEncrypted, process.env.SECRET).toString(crypto.enc.Utf8);
     const data = JSON.parse(dataDecrypted);
@@ -41,7 +41,28 @@ class userController {
     if(!data.username || !data.password)
       return res.status(400).send({ message: 'invalid data.' })
 
-    const query = User.find({ username: data.username }) // todo
+    const password = crypto.AES.encrypt(JSON.stringify(data.password), process.env.DB_SECRET).toString();
+    const user = User.findOne({ username: data.username, password: password });
+
+    const hasValidUser = user != null && user != undefined;
+    if(!hasValidUser)
+      return res.status(400).send({ message: 'this user doesnt exists' });
+
+    try {
+      const secret = process.env.SECRET;
+      const token = jwt.sign({
+        id: user._id
+      },
+      secret,
+      {
+        expiresIn: '1 day'
+      });
+
+      return res.status(200).send({ token: token });
+    } catch (err) {
+      console.log(err);
+      return res.status(500).send({ message: "Internal Server Error" });
+    }
   }
 }
 
